@@ -1,1 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>ExStravaTor: share your run tracks</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛰️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---- Settings live in the <script> block at the bottom ---- */
+  :root {
+    --mist: #e6ece7;
+    --pine: #1d3529;
+    --moss: #4e6a5a;
+    --contour: #b5c7bb;
+    --strava: #fc5200;
+    --card: #f5f8f5;
+    color-scheme: light dark;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --mist: #13211a;
+      --pine: #e3ebe5;
+      --moss: #9db3a5;
+      --contour: #2b4336;
+      --card: #1a2c23;
+    }
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  body {
+    margin: 0;
+    background: var(--mist);
+    color: var(--pine);
+    font: 400 1.0625rem/1.55 "Barlow", system-ui, sans-serif;
+  }
+  .topo {
+    display: block;
+    width: 100%;
+    height: 9.5rem;
+    color: var(--contour);
+  }
+  main {
+    max-width: 34rem;
+    margin: -3.5rem auto 0;
+    padding: 0 1.4rem 3rem;
+    position: relative;
+  }
+  h1 {
+    font: 700 clamp(2.1rem, 9vw, 2.9rem)/1.02 "Barlow Semi Condensed", "Barlow", sans-serif;
+    letter-spacing: -0.01em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  p { margin: 0 0 1rem; max-width: 38ch; }
+  .muted { color: var(--moss); font-size: 0.95rem; }
+  ol.trail {
+    list-style: none;
+    margin: 1.8rem 0 2rem;
+    padding: 0 0 0 1.6rem;
+    border-left: 3px dashed var(--contour);
+  }
+  ol.trail li { position: relative; margin-bottom: 1.1rem; }
+  ol.trail li::before {
+    content: "";
+    position: absolute;
+    left: calc(-1.6rem - 9px);
+    top: 0.35rem;
+    width: 15px; height: 15px;
+    border-radius: 50%;
+    background: var(--mist);
+    border: 3px solid var(--moss);
+  }
+  ol.trail li.here::before { background: var(--strava); border-color: var(--strava); }
+  ol.trail strong { font-weight: 500; display: block; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    width: 100%;
+    min-height: 3.4rem;
+    border: 0; border-radius: 6px;
+    font: 600 1.15rem "Barlow Semi Condensed", "Barlow", sans-serif;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn-strava { background: var(--strava); color: #fff; }
+  .btn-plain {
+    background: transparent; color: var(--pine);
+    border: 2px solid var(--contour);
+    margin-top: 0.8rem;
+  }
+  .btn:focus-visible { outline: 3px solid var(--pine); outline-offset: 3px; }
+  .code {
+    background: var(--card);
+    border: 2px solid var(--contour);
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    margin: 1.4rem 0;
+    font: 500 1.05rem/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+  .status { min-height: 1.5rem; margin-top: 0.8rem; color: var(--moss); font-size: 0.95rem; }
+  a { color: inherit; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) {
+    .topo path { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: draw 1.6s ease-out forwards; }
+    .topo path:nth-child(2) { animation-delay: .1s } .topo path:nth-child(3) { animation-delay: .2s }
+    .topo path:nth-child(4) { animation-delay: .3s } .topo path:nth-child(5) { animation-delay: .4s }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+  }
+</style>
+</head>
+<body>
+<svg class="topo" viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6">
+  <path d="M-10 128 C60 110 90 138 150 118 S250 70 300 92 410 120 410 120"/>
+  <path d="M-10 104 C50 86 100 116 160 94 S240 48 300 66 410 96 410 96"/>
+  <path d="M-10 80 C40 64 110 92 170 70 S235 28 290 42 410 70 410 70"/>
+  <path d="M20 58 C70 44 120 66 175 48 S230 14 275 22 350 44 410 40"/>
+  <path d="M120 36 C150 26 180 38 205 28 S240 6 262 10 300 22 318 18"/>
+</svg>
 
+<main>
+  <!-- Start: no code yet -->
+  <section id="start" hidden>
+    <h1 data-owner>Share your run tracks with Brian</h1>
+    <p>This lets <span data-owner-name>Brian</span> download the GPS path of runs you did together. It reads your activities and can't post, edit or see your messages.</p>
+    <ol class="trail">
+      <li class="here"><strong>Connect with Strava</strong><span class="muted">Tap Authorize on the next screen and leave the boxes ticked.</span></li>
+      <li><strong>Send the code</strong><span class="muted">You'll come back here with a code to text over.</span></li>
+    </ol>
+    <a class="btn btn-strava" id="connect" href="#">Connect with Strava</a>
+    <p class="muted" style="margin-top:1.2rem">You can disconnect anytime at <a href="https://www.strava.com/settings/apps">strava.com/settings/apps</a>.</p>
+  </section>
+
+  <!-- Got a code -->
+  <section id="done" hidden>
+    <h1>Now send this code</h1>
+    <p>It expires within a few minutes, so send it right away.</p>
+    <div class="code" id="code"></div>
+    <button class="btn btn-strava" id="send">Send code</button>
+    <button class="btn btn-plain" id="copy">Copy code</button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <ol class="trail">
+      <li><strong>Connected with Strava</strong></li>
+      <li class="here"><strong>Send the code</strong><span class="muted">If it doesn't work, <a href="#" data-restart>connect again</a> for a fresh one.</span></li>
+    </ol>
+  </section>
+
+  <!-- Declined or missing permission -->
+  <section id="problem" hidden>
+    <h1 id="problem-title">Nothing was shared</h1>
+    <p id="problem-text">You declined access on Strava. If that was a mistake, connect again.</p>
+    <a class="btn btn-strava" href="#" data-restart>Connect again</a>
+  </section>
+</main>
+
+<script>
+  // ---- Settings: edit these two lines ----
+  const CLIENT_ID = "YOUR_CLIENT_ID";   // from strava.com/settings/api (public, safe to commit)
+  const OWNER = "Brian";                // name shown to friends
+  const SEND_TO = "";                   // optional phone number for the SMS fallback
+
+  const redirectUri = location.origin + location.pathname;
+  const params = new URLSearchParams(location.search);
+  const $ = (id) => document.getElementById(id);
+
+  document.querySelectorAll("[data-owner]").forEach(el => el.textContent = `Share your run tracks with ${OWNER}`);
+  document.querySelectorAll("[data-owner-name]").forEach(el => el.textContent = OWNER);
+
+  function authorizeUrl() {
+    const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    const base = mobile ? "https://www.strava.com/oauth/mobile/authorize"
+                        : "https://www.strava.com/oauth/authorize";
+    return base + "?" + new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      approval_prompt: "auto",
+      scope: "activity:read_all",
+    });
+  }
+  $("connect").href = authorizeUrl();
+  document.querySelectorAll("[data-restart]").forEach(el => el.href = authorizeUrl());
+
+  function show(id) {
+    ["start", "done", "problem"].forEach(s => $(s).hidden = s !== id);
+  }
+
+  const code = params.get("code");
+  const scope = params.get("scope") || "";
+  const error = params.get("error");
+
+  if (error) {
+    show("problem");
+  } else if (code && !scope.includes("activity:read")) {
+    $("problem-title").textContent = "The activity permission is off";
+    $("problem-text").textContent =
+      `${OWNER} needs permission to view your activities. Connect again and leave that box ticked.`;
+    show("problem");
+  } else if (code) {
+    $("code").textContent = code;
+    show("done");
+    const message = `ExStravaTor code: ${code}`;
+    const status = $("status");
+
+    $("send").addEventListener("click", async () => {
+      if (navigator.share) {
+        try { await navigator.share({ text: message }); status.textContent = `Sent. Thanks! ${OWNER} will take it from here.`; return; }
+        catch (e) { if (e.name === "AbortError") return; }
+      }
+      location.href = `sms:${SEND_TO}?body=${encodeURIComponent(message)}`;
+    });
+
+    $("copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(message); status.textContent = `Copied. Paste it into a message to ${OWNER}.`; }
+      catch { status.textContent = "Couldn't copy automatically. Press and hold the code to copy it."; }
+    });
+  } else {
+    show("start");
+  }
+</script>
+</body>
+</html>
