@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """ExStravaTor: pull friends' Strava run tracks as GPX files.
 
-Standard library only, so it runs in Termux with just `pkg install python`.
+Standard library only. Runs on Windows (plain `python`, via PowerShell) or
+in Termux on Android with just `pkg install python`.
 Secrets and tokens live in ~/.exstravator/ (never in the repo).
 
 Commands:
   setup                  Save your Strava app's client ID and secret
-  auth                   Connect a friend on this phone (localhost redirect)
+  auth                   Connect a friend on this device (localhost redirect)
   exchange [TEXT]        Redeem a code a friend sent from the Pages site
   list                   Show connected athletes
   fetch [--date D]       Download that day's runs as GPX for everyone
@@ -144,6 +145,14 @@ def copy_to_clipboard(text):
     if shutil.which("termux-clipboard-set"):  # needs the Termux:API app
         subprocess.run(["termux-clipboard-set"], input=text.encode(), check=False)
         return True
+    if os.name == "nt":
+        # Passed via env var (not a CLI arg) so PowerShell never has to parse the text.
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "Set-Clipboard -Value $env:EXSTRAVATOR_CLIP"],
+            env={**os.environ, "EXSTRAVATOR_CLIP": text}, check=False,
+        )
+        return True
     return False
 
 
@@ -151,6 +160,12 @@ def read_clipboard():
     if shutil.which("termux-clipboard-get"):
         out = subprocess.run(["termux-clipboard-get"], capture_output=True, check=False)
         return out.stdout.decode().strip()
+    if os.name == "nt":
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard"],
+            capture_output=True, check=False,
+        )
+        return out.stdout.decode(errors="replace").strip()
     return ""
 
 
@@ -208,7 +223,7 @@ def cmd_auth(args):
 
     server = http.server.HTTPServer(("127.0.0.1", LOCAL_PORT), Handler)
     copied = copy_to_clipboard(url)
-    print("Open this link in an incognito tab, then hand the phone to your friend"
+    print("Open this link in an incognito/private tab, then hand the device to your friend"
           + (" (it's on your clipboard):" if copied else ":"))
     print(f"\n{url}\n")
     if args.open:
@@ -296,6 +311,10 @@ def default_out_dir():
     downloads = os.path.expanduser("~/storage/downloads")  # after termux-setup-storage
     if os.path.isdir(downloads):
         return os.path.join(downloads, "ExStravaTor")
+    if os.name == "nt":
+        downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+        if os.path.isdir(downloads):
+            return os.path.join(downloads, "ExStravaTor")
     return os.path.abspath("gpx")
 
 
@@ -372,7 +391,7 @@ def main():
                                  description="Pull friends' Strava runs as GPX.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("setup", help="save client ID and secret").set_defaults(fn=cmd_setup)
-    p = sub.add_parser("auth", help="connect a friend on this phone")
+    p = sub.add_parser("auth", help="connect a friend on this device")
     p.add_argument("--open", action="store_true", help="open the link in the browser")
     p.set_defaults(fn=cmd_auth)
     p = sub.add_parser("exchange", help="redeem a code sent from the Pages site")

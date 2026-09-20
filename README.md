@@ -1,11 +1,12 @@
 # ExStravaTor
 
 Pull GPX tracks of runs your friends did with you, using the Strava API.
-Two parts: a Python script you run in Termux on Android, and a one-page
-GitHub Pages site friends open on their own phones to connect.
+Two parts: a Python script you run on your own machine (Windows/PowerShell,
+or Termux on Android), and a one-page GitHub Pages site friends open on
+their own phones to connect.
 
 No secrets or tokens are ever stored in this repo. They live in
-`~/.exstravator/` on your phone.
+`~/.exstravator/` on whichever device you run the script from.
 
 ## One-time setup
 
@@ -23,7 +24,17 @@ No secrets or tokens are ever stored in this repo. They live in
    Pages on a free account needs a public repo; that's safe, since the client ID is public by design.
 3. The site will be at `https://brian-kujawski.github.io/ExStravaTor/`.
 
-**Termux** (install from F-Droid; the Play Store build is outdated)
+**PowerShell** (Windows; install Python 3 from python.org or the Microsoft
+Store first, and Git if you don't have it)
+```powershell
+git clone https://github.com/brian-kujawski/ExStravaTor
+cd ExStravaTor
+python exstravator.py setup   # paste Client ID and secret
+```
+Clipboard copy/paste and the `Downloads\ExStravaTor` output folder work
+out of the box, no extra tools needed.
+
+**Termux** (Android; install from F-Droid, the Play Store build is outdated)
 ```sh
 pkg install python git
 termux-setup-storage          # lets GPX files land in Downloads
@@ -36,7 +47,8 @@ script can use your clipboard.
 ## Connecting friends
 
 **Remotely:** text them the Pages link. They tap *Connect with Strava*,
-authorize, then tap *Send code*. When the message arrives, copy it and run
+authorize, then tap *Send code*. When the message arrives, copy it (or get
+it onto whichever machine you run the script on) and run
 ```sh
 python exstravator.py exchange          # reads the clipboard
 python exstravator.py exchange 'ExStravaTor code: …'   # or paste it
@@ -45,7 +57,7 @@ Codes expire within minutes, so redeem them promptly. If one fails, ask
 them to open the link again.
 
 **In person:** run `python exstravator.py auth`, open the printed link in an
-incognito tab, and hand your friend the phone.
+incognito/private tab, and hand your friend the device.
 
 Each friend connects once. The script refreshes their access automatically.
 
