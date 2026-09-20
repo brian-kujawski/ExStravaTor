@@ -69,4 +69,10 @@ python exstravator.py fetch --all-types          # today, any sport
 ```
 Files land in `Downloads/ExStravaTor/` as `DATE_name_activityid.gpx`.
 
+If someone has more than one matching activity that day (an early swim, a
+bike commute, a solo shakeout jog before the group run), you'll be shown
+each one's time, distance and duration and asked which to save — pick
+numbers, `a` for all, or `s` to skip that person. Pass `--auto` to skip the
+prompt and save every match, like before.
+
 `list` shows who's connected; `remove NAME` disconnects someone and deletes their token.

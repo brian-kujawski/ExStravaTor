@@ -11,6 +11,7 @@ Commands:
   exchange [TEXT]        Redeem a code a friend sent from the Pages site
   list                   Show connected athletes
   fetch [--date D]       Download that day's runs as GPX for everyone
+                         (prompts if someone has more than one match)
   remove NAME_OR_ID      Disconnect an athlete and delete their token
 """
 import argparse
@@ -318,6 +319,37 @@ def default_out_dir():
     return os.path.abspath("gpx")
 
 
+def describe_activity(act):
+    start = (act.get("start_date_local") or "")[11:16]
+    km = (act.get("distance") or 0) / 1000
+    minutes = (act.get("moving_time") or 0) / 60
+    sport = act.get("sport_type", "")
+    return f"{start}  {sport:<10} {km:5.1f} km  {minutes:4.0f} min  {act.get('name') or ''}"
+
+
+def disambiguate(name, matches, auto):
+    matches = sorted(matches, key=lambda a: a.get("start_date_local", ""))
+    if auto or not sys.stdin.isatty():
+        if not auto:
+            print(f"{name}: {len(matches)} matching activities, saving all "
+                  "(non-interactive; pass --auto to silence this).")
+        return matches
+    print(f"\n{name} has {len(matches)} matching activities:")
+    for i, act in enumerate(matches, 1):
+        print(f"  {i}. {describe_activity(act)}")
+    choice = input(f"  Save which for {name}? [a]ll / [s]kip / numbers e.g. 1,3 [a]: ").strip().lower() or "a"
+    if choice in ("s", "skip"):
+        return []
+    if choice in ("a", "all"):
+        return matches
+    picks = [matches[int(tok) - 1] for tok in choice.replace(",", " ").split()
+             if tok.isdigit() and 1 <= int(tok) <= len(matches)]
+    if not picks:
+        print(f"  Didn't understand that; saving all for {name}.")
+        return matches
+    return picks
+
+
 def cmd_fetch(args):
     need_config()
     tokens = load(TOKENS, {})
@@ -352,6 +384,11 @@ def cmd_fetch(args):
         if not matches:
             print(f"{name}: no matching activity on {args.date}.")
             continue
+        if len(matches) > 1:
+            matches = disambiguate(name, matches, args.auto)
+            if not matches:
+                print(f"{name}: skipped.")
+                continue
         for act in matches:
             try:
                 streams = request("GET", f"{API}/activities/{act['id']}/streams?"
@@ -403,6 +440,8 @@ def main():
     p.add_argument("--who", action="append", help="name or athlete ID; repeatable")
     p.add_argument("--types", default=DEFAULT_TYPES, help=f"sport types (default {DEFAULT_TYPES})")
     p.add_argument("--all-types", action="store_true", help="include every sport type")
+    p.add_argument("--auto", action="store_true",
+                   help="skip the picker when someone has multiple matches; save all of them")
     p.add_argument("--out", help="output folder")
     p.set_defaults(fn=cmd_fetch)
     p = sub.add_parser("remove", help="disconnect an athlete")
