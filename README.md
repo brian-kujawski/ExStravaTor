@@ -98,3 +98,21 @@ numbers, `a` for all, or `s` to skip that person. Pass `--auto` to skip the
 prompt and save every match, like before.
 
 `list` shows who's connected; `remove NAME` disconnects someone and deletes their token.
+
+## Using it from HeatMon
+
+HeatMon calls the script directly and reads JSON back. These commands never
+print real names:
+```sh
+python exstravator.py list --json                    # athlete IDs + pseudonyms
+python exstravator.py candidates --date 2026-09-13   # everyone's activities that day
+python exstravator.py save --athlete 123 --activity 456 --trail 45 --code AGNS --out tracks --json
+```
+`candidates` lists every sport with its title and route line so a person can
+confirm which activity was the group run; `save` then writes just that one as
+`45_AGNS.gpx` (refusing to overwrite unless given `--replace`). On failure they
+print `{"error": ..., "message": ...}` and exit 1; `"rate_limited"` means wait
+15 minutes.
+
+Set `EXSTRAVATOR_HOME` to keep the secrets folder somewhere other than
+`~/.exstravator` (HeatMon's Docker setup mounts it that way).

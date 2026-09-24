@@ -16,6 +16,14 @@ Commands:
         [--trail N]      (prompts if someone has more than one match);
                          --trail names files N_pseudonym.gpx
   remove NAME_OR_ID      Disconnect an athlete and delete their token
+
+Machine-readable commands (used by HeatMon; print JSON, never real names):
+  list --json            Connected athletes and their pseudonyms
+  candidates --date D    Everyone's activities that day, for review
+  save --athlete A --activity X --trail N
+                         Write one chosen activity as N_CODE.gpx
+
+Set EXSTRAVATOR_HOME to keep secrets somewhere other than ~/.exstravator.
 """
 import argparse
 import datetime as dt
@@ -34,7 +42,7 @@ import urllib.request
 import webbrowser
 from xml.sax.saxutils import escape
 
-HOME = os.path.expanduser("~/.exstravator")
+HOME = os.environ.get("EXSTRAVATOR_HOME") or os.path.expanduser("~/.exstravator")
 CONFIG = os.path.join(HOME, "config.json")
 TOKENS = os.path.join(HOME, "tokens.json")
 PSEUDONYMS = os.path.join(HOME, "pseudonyms.json")
@@ -80,6 +88,10 @@ class ApiError(Exception):
         self.status = status
 
 
+class RateLimited(ApiError):
+    pass
+
+
 def request(method, url, token=None, form=None):
     data = urllib.parse.urlencode(form).encode() if form else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -89,7 +101,8 @@ def request(method, url, token=None, form=None):
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
-        raise ApiError(e.code, e.read().decode(errors="replace")) from None
+        cls = RateLimited if e.code == 429 else ApiError
+        raise cls(e.code, e.read().decode(errors="replace")) from None
 
 
 # ---------- tokens ----------
@@ -276,6 +289,10 @@ def pseudonym(aid, name, table):
 def cmd_list(args):
     tokens = load(TOKENS, {})
     table = load(PSEUDONYMS, {})
+    if args.json:
+        emit([{"athlete_id": aid, "pseudonym": pseudonym(aid, rec["name"], table)}
+              for aid, rec in tokens.items()])
+        return
     if not tokens:
         print("No athletes connected yet. Use `auth` or `exchange`.")
     for aid, rec in tokens.items():
@@ -365,15 +382,40 @@ def disambiguate(name, matches, auto):
     return picks
 
 
+def day_activities(token, date):
+    """All of an athlete's activities whose own local start date is `date`."""
+    day = dt.date.fromisoformat(date)
+    # Wide UTC window, then filter on each activity's own local start date.
+    after = int(dt.datetime.combine(day - dt.timedelta(days=1), dt.time()).timestamp())
+    before = int(dt.datetime.combine(day + dt.timedelta(days=2), dt.time()).timestamp())
+    acts = request("GET", f"{API}/athlete/activities?"
+                   + urllib.parse.urlencode({"after": after, "before": before,
+                                             "per_page": 100}), token)
+    return [a for a in acts if a.get("start_date_local", "")[:10] == date]
+
+
+def write_track(path, act, alias, token):
+    """Download an activity's GPS streams and write them as GPX.
+
+    Returns False if the activity has no GPS track. The activity's ID and title
+    are never written: either leads back to the real athlete.
+    """
+    streams = request("GET", f"{API}/activities/{act['id']}/streams?"
+                      + urllib.parse.urlencode({"keys": "latlng,time,altitude",
+                                                "key_by_type": "true"}), token)
+    if "latlng" not in streams:
+        return False
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(to_gpx(act, alias, streams))
+    return True
+
+
 def cmd_fetch(args):
     need_config()
     tokens = load(TOKENS, {})
     if not tokens:
         sys.exit("No athletes connected yet.")
-    day = dt.date.fromisoformat(args.date)
-    # Wide UTC window, then filter on each activity's own local start date.
-    after = int(dt.datetime.combine(day - dt.timedelta(days=1), dt.time()).timestamp())
-    before = int(dt.datetime.combine(day + dt.timedelta(days=2), dt.time()).timestamp())
+    dt.date.fromisoformat(args.date)  # validate before any API calls
     types = None if args.all_types else set(args.types.split(","))
     out_dir = args.out or default_out_dir()
     os.makedirs(out_dir, exist_ok=True)
@@ -390,9 +432,7 @@ def cmd_fetch(args):
             continue
         try:
             token = access_token(aid, tokens)
-            acts = request("GET", f"{API}/athlete/activities?"
-                           + urllib.parse.urlencode({"after": after, "before": before,
-                                                     "per_page": 100}), token)
+            acts = day_activities(token, args.date)
         except ApiError as e:
             if e.status == 429:
                 sys.exit("Strava rate limit hit. Wait 15 minutes and try again.")
@@ -400,9 +440,7 @@ def cmd_fetch(args):
                 print(f"{name}: access was revoked. Run `remove {aid}` and reconnect them.")
                 continue
             raise
-        matches = [a for a in acts
-                   if a.get("start_date_local", "")[:10] == args.date
-                   and (types is None or a.get("sport_type") in types)]
+        matches = [a for a in acts if types is None or a.get("sport_type") in types]
         if not matches:
             print(f"{name}: no matching activity on {args.date}.")
             continue
@@ -412,23 +450,16 @@ def cmd_fetch(args):
                 print(f"{name}: skipped.")
                 continue
         for n, act in enumerate(matches, 1):
-            try:
-                streams = request("GET", f"{API}/activities/{act['id']}/streams?"
-                                  + urllib.parse.urlencode({"keys": "latlng,time,altitude",
-                                                            "key_by_type": "true"}), token)
-            except ApiError as e:
-                if e.status == 429:
-                    sys.exit("Strava rate limit hit. Wait 15 minutes and try again.")
-                raise
-            if "latlng" not in streams:
-                print(f"{name}: '{act.get('name')}' has no GPS track, skipped.")
-                continue
-            # No activity ID or title in the file: either leads back to the real athlete.
             suffix = f"_{n}" if len(matches) > 1 else ""
             prefix = slug(args.trail) if args.trail else args.date
             path = os.path.join(out_dir, f"{prefix}_{slug(alias)}{suffix}.gpx")
-            with open(path, "w") as f:
-                f.write(to_gpx(act, alias, streams))
+            try:
+                wrote = write_track(path, act, alias, token)
+            except RateLimited:
+                sys.exit("Strava rate limit hit. Wait 15 minutes and try again.")
+            if not wrote:
+                print(f"{name}: '{act.get('name')}' has no GPS track, skipped.")
+                continue
             saved += 1
             print(f"{name}: saved {os.path.basename(path)} ({act.get('name')})")
     print(f"\n{saved} file(s) in {out_dir}")
@@ -439,6 +470,78 @@ def cmd_fetch(args):
         save(PSEUDONYMS, table)
         print(f"\nNo pseudonym for {', '.join(missing)}. Fill in their entries in "
               f"{PSEUDONYMS}, then rerun with --who for them.")
+
+
+def emit(data):
+    print(json.dumps(data, indent=2))
+
+
+def cmd_candidates(args):
+    """JSON for review: every activity each athlete did that day, any sport.
+
+    Titles and route lines are included so a person can tell a group run from
+    a solo one; they're never written to disk.
+    """
+    need_config()
+    tokens = load(TOKENS, {})
+    table = load(PSEUDONYMS, {})
+    dt.date.fromisoformat(args.date)
+    aids = [a for a in args.who if a in tokens] if args.who else list(tokens)
+    out = []
+    for aid in aids:
+        entry = {"athlete_id": aid, "pseudonym": pseudonym(aid, tokens[aid]["name"], table),
+                 "status": "ok", "activities": []}
+        out.append(entry)
+        if not entry["pseudonym"]:
+            entry["status"] = "no_pseudonym"
+            continue
+        try:
+            acts = day_activities(access_token(aid, tokens), args.date)
+        except RateLimited:
+            raise
+        except ApiError as e:
+            if e.status in (400, 401, 403):
+                entry["status"] = "revoked"
+                continue
+            raise
+        for a in sorted(acts, key=lambda a: a.get("start_date_local", "")):
+            entry["activities"].append({
+                "activity_id": str(a["id"]),
+                "start_local": a.get("start_date_local"),
+                "sport_type": a.get("sport_type"),
+                "distance_m": a.get("distance"),
+                "moving_time_s": a.get("moving_time"),
+                "elapsed_time_s": a.get("elapsed_time"),
+                "title": a.get("name"),
+                "summary_polyline": (a.get("map") or {}).get("summary_polyline") or None,
+            })
+    emit({"date": args.date, "athletes": out})
+
+
+def cmd_save(args):
+    """Write one chosen activity as TRAIL_CODE.gpx."""
+    need_config()
+    tokens = load(TOKENS, {})
+    if args.athlete not in tokens:
+        sys.exit(f"No connected athlete with ID {args.athlete}.")
+    alias = pseudonym(args.athlete, tokens[args.athlete]["name"], load(PSEUDONYMS, {}))
+    if not alias:
+        sys.exit(f"Athlete {args.athlete} has no pseudonym set in {PSEUDONYMS}.")
+    out_dir = args.out or default_out_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    fname = f"{slug(args.trail)}_{slug(args.code or alias)}.gpx"
+    path = os.path.join(out_dir, fname)
+    if os.path.exists(path) and not args.replace:
+        sys.exit(f"{fname} already exists; pass --replace to overwrite it.")
+    token = access_token(args.athlete, tokens)
+    # Fetched with this athlete's own token, so it must be one of theirs.
+    act = request("GET", f"{API}/activities/{args.activity}", token)
+    if not write_track(path, act, alias, token):
+        sys.exit("That activity has no GPS track.")
+    if args.json:
+        emit({"file": fname, "path": os.path.abspath(path)})
+    else:
+        print(f"Saved {fname}")
 
 
 def cmd_remove(args):
@@ -466,7 +569,9 @@ def main():
     p = sub.add_parser("exchange", help="redeem a code sent from the Pages site")
     p.add_argument("text", nargs="*", help="the message or code (default: clipboard)")
     p.set_defaults(fn=cmd_exchange)
-    sub.add_parser("list", help="show connected athletes").set_defaults(fn=cmd_list)
+    p = sub.add_parser("list", help="show connected athletes")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(fn=cmd_list)
     p = sub.add_parser("fetch", help="download a day's runs as GPX")
     p.add_argument("--date", default=dt.date.today().isoformat(), help="YYYY-MM-DD (default today)")
     p.add_argument("--who", action="append", help="name or athlete ID; repeatable")
@@ -477,11 +582,45 @@ def main():
     p.add_argument("--trail", help="trail number; names files TRAIL_pseudonym.gpx instead of by date")
     p.add_argument("--out", help="output folder")
     p.set_defaults(fn=cmd_fetch)
+    p = sub.add_parser("candidates", help="JSON list of everyone's activities on a day")
+    p.add_argument("--date", default=dt.date.today().isoformat(), help="YYYY-MM-DD (default today)")
+    p.add_argument("--who", action="append", help="athlete ID; repeatable (default everyone)")
+    p.add_argument("--json", action="store_true", help="accepted for symmetry; output is always JSON")
+    p.set_defaults(fn=cmd_candidates, json=True)
+    p = sub.add_parser("save", help="write one activity as TRAIL_CODE.gpx")
+    p.add_argument("--athlete", required=True, help="athlete ID")
+    p.add_argument("--activity", required=True, help="Strava activity ID")
+    p.add_argument("--trail", required=True, help="trail number")
+    p.add_argument("--code", help="runner code for the filename (default: the pseudonym)")
+    p.add_argument("--out", help="output folder")
+    p.add_argument("--replace", action="store_true", help="overwrite an existing file")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.set_defaults(fn=cmd_save)
     p = sub.add_parser("remove", help="disconnect an athlete")
     p.add_argument("who", help="name or athlete ID")
     p.set_defaults(fn=cmd_remove)
     args = ap.parse_args()
-    args.fn(args)
+    if not getattr(args, "json", False):
+        args.fn(args)
+        return
+    # JSON mode: every failure becomes {"error", "message"} on stdout, exit 1.
+    try:
+        args.fn(args)
+    except RateLimited:
+        emit({"error": "rate_limited",
+              "message": "Strava rate limit hit. Wait 15 minutes and try again."})
+        sys.exit(1)
+    except ApiError as e:
+        emit({"error": "strava_error", "status": e.status, "message": str(e)})
+        sys.exit(1)
+    except SystemExit as e:
+        if e.code in (None, 0):
+            raise
+        emit({"error": "error", "message": str(e.code)})
+        sys.exit(1)
+    except ValueError as e:
+        emit({"error": "bad_input", "message": str(e)})
+        sys.exit(1)
 
 
 if __name__ == "__main__":
