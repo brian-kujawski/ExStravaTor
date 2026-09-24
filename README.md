@@ -67,7 +67,9 @@ python exstravator.py fetch --date 2026-09-13
 python exstravator.py fetch --date 2026-09-13 --who sam --who alex
 python exstravator.py fetch --all-types          # today, any sport
 ```
-Files land in `Downloads/ExStravaTor/` as `DATE_pseudonym_activityid.gpx`.
+Files land in `Downloads/ExStravaTor/` as `DATE_pseudonym.gpx` (with `_2`, `_3`…
+added if you save more than one activity for someone that day). Activity IDs
+and titles are left out, since either can lead back to the real athlete.
 
 ## Pseudonyms
 

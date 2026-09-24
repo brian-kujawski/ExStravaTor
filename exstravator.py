@@ -315,11 +315,9 @@ def to_gpx(act, athlete_name, streams):
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<gpx version="1.1" creator="ExStravaTor" '
         'xmlns="http://www.topografix.com/GPX/1/1">\n'
-        f"  <metadata><name>{escape(act.get('name', ''))}</name>"
-        f"<author><name>{escape(athlete_name)}</name></author>"
+        f"  <metadata><author><name>{escape(athlete_name)}</name></author>"
         f"<time>{start.strftime('%Y-%m-%dT%H:%M:%SZ')}</time></metadata>\n"
-        f"  <trk><name>{escape(act.get('name', ''))}</name>"
-        f"<type>{escape(act.get('sport_type', ''))}</type>\n"
+        f"  <trk><type>{escape(act.get('sport_type', ''))}</type>\n"
         "    <trkseg>\n" + "\n".join(pts) + "\n    </trkseg>\n  </trk>\n</gpx>\n"
     )
 
@@ -412,7 +410,7 @@ def cmd_fetch(args):
             if not matches:
                 print(f"{name}: skipped.")
                 continue
-        for act in matches:
+        for n, act in enumerate(matches, 1):
             try:
                 streams = request("GET", f"{API}/activities/{act['id']}/streams?"
                                   + urllib.parse.urlencode({"keys": "latlng,time,altitude",
@@ -424,7 +422,9 @@ def cmd_fetch(args):
             if "latlng" not in streams:
                 print(f"{name}: '{act.get('name')}' has no GPS track, skipped.")
                 continue
-            path = os.path.join(out_dir, f"{args.date}_{slug(alias)}_{act['id']}.gpx")
+            # No activity ID or title in the file: either leads back to the real athlete.
+            suffix = f"_{n}" if len(matches) > 1 else ""
+            path = os.path.join(out_dir, f"{args.date}_{slug(alias)}{suffix}.gpx")
             with open(path, "w") as f:
                 f.write(to_gpx(act, alias, streams))
             saved += 1
