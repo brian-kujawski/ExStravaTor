@@ -65,10 +65,12 @@ Each friend connects once. The script refreshes their access automatically.
 ```sh
 python exstravator.py fetch --date 2026-09-13
 python exstravator.py fetch --date 2026-09-13 --who sam --who alex
+python exstravator.py fetch --date 2026-09-13 --trail 12   # files named 12_SAM.gpx
 python exstravator.py fetch --all-types          # today, any sport
 ```
 Files land in `Downloads/ExStravaTor/` as `DATE_pseudonym.gpx` (with `_2`, `_3`…
-added if you save more than one activity for someone that day). Activity IDs
+added if you save more than one activity for someone that day). With
+`--trail N`, the trail number replaces the date: `N_pseudonym.gpx`. Activity IDs
 and titles are left out, since either can lead back to the real athlete.
 
 ## Pseudonyms

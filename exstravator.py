@@ -13,7 +13,8 @@ Commands:
   exchange [TEXT]        Redeem a code a friend sent from the Pages site
   list                   Show connected athletes
   fetch [--date D]       Download that day's runs as GPX for everyone
-                         (prompts if someone has more than one match)
+        [--trail N]      (prompts if someone has more than one match);
+                         --trail names files N_pseudonym.gpx
   remove NAME_OR_ID      Disconnect an athlete and delete their token
 """
 import argparse
@@ -424,7 +425,8 @@ def cmd_fetch(args):
                 continue
             # No activity ID or title in the file: either leads back to the real athlete.
             suffix = f"_{n}" if len(matches) > 1 else ""
-            path = os.path.join(out_dir, f"{args.date}_{slug(alias)}{suffix}.gpx")
+            prefix = slug(args.trail) if args.trail else args.date
+            path = os.path.join(out_dir, f"{prefix}_{slug(alias)}{suffix}.gpx")
             with open(path, "w") as f:
                 f.write(to_gpx(act, alias, streams))
             saved += 1
@@ -472,6 +474,7 @@ def main():
     p.add_argument("--all-types", action="store_true", help="include every sport type")
     p.add_argument("--auto", action="store_true",
                    help="skip the picker when someone has multiple matches; save all of them")
+    p.add_argument("--trail", help="trail number; names files TRAIL_pseudonym.gpx instead of by date")
     p.add_argument("--out", help="output folder")
     p.set_defaults(fn=cmd_fetch)
     p = sub.add_parser("remove", help="disconnect an athlete")
