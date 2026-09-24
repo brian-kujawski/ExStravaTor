@@ -3,7 +3,9 @@
 
 Standard library only. Runs on Windows (plain `python`, via PowerShell) or
 in Termux on Android with just `pkg install python`.
-Secrets and tokens live in ~/.exstravator/ (never in the repo).
+Secrets and tokens live in ~/.exstravator/ (never in the repo), along with
+pseudonyms.json, which maps Strava names to the pseudonyms written into GPX
+files so real names never end up in the public repo.
 
 Commands:
   setup                  Save your Strava app's client ID and secret
@@ -34,6 +36,7 @@ from xml.sax.saxutils import escape
 HOME = os.path.expanduser("~/.exstravator")
 CONFIG = os.path.join(HOME, "config.json")
 TOKENS = os.path.join(HOME, "tokens.json")
+PSEUDONYMS = os.path.join(HOME, "pseudonyms.json")
 API = "https://www.strava.com/api/v3"
 TOKEN_URL = "https://www.strava.com/oauth/token"
 SCOPE = "activity:read_all"
@@ -259,12 +262,24 @@ def cmd_exchange(args):
     exchange_code(code)
 
 
+def pseudonym(aid, name, table):
+    """Look up by athlete ID first, then by Strava name (case-insensitive)."""
+    if table.get(aid):
+        return table[aid]
+    for key, alias in table.items():
+        if alias and key.strip().lower() == name.strip().lower():
+            return alias
+    return None
+
+
 def cmd_list(args):
     tokens = load(TOKENS, {})
+    table = load(PSEUDONYMS, {})
     if not tokens:
         print("No athletes connected yet. Use `auth` or `exchange`.")
     for aid, rec in tokens.items():
-        print(f"{aid:>12}  {rec['name']}")
+        alias = pseudonym(aid, rec["name"], table) or "(no pseudonym)"
+        print(f"{aid:>12}  {rec['name']:<24}  {alias}")
 
 
 def select(tokens, who):
@@ -278,7 +293,8 @@ def select(tokens, who):
 
 
 def slug(s):
-    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "athlete"
+    # Case is kept so pseudonyms like "SAM" stay as written.
+    return re.sub(r"[^A-Za-z0-9_]+", "-", s).strip("-") or "athlete"
 
 
 def to_gpx(act, athlete_name, streams):
@@ -363,9 +379,16 @@ def cmd_fetch(args):
     out_dir = args.out or default_out_dir()
     os.makedirs(out_dir, exist_ok=True)
     saved = 0
+    table = load(PSEUDONYMS, {})
+    missing = []
 
     for aid in select(tokens, args.who):
         name = tokens[aid]["name"]
+        alias = pseudonym(aid, name, table)
+        if not alias:
+            missing.append(name)
+            print(f"{name}: no pseudonym set, skipped.")
+            continue
         try:
             token = access_token(aid, tokens)
             acts = request("GET", f"{API}/athlete/activities?"
@@ -401,12 +424,19 @@ def cmd_fetch(args):
             if "latlng" not in streams:
                 print(f"{name}: '{act.get('name')}' has no GPS track, skipped.")
                 continue
-            path = os.path.join(out_dir, f"{args.date}_{slug(name)}_{act['id']}.gpx")
+            path = os.path.join(out_dir, f"{args.date}_{slug(alias)}_{act['id']}.gpx")
             with open(path, "w") as f:
-                f.write(to_gpx(act, name, streams))
+                f.write(to_gpx(act, alias, streams))
             saved += 1
             print(f"{name}: saved {os.path.basename(path)} ({act.get('name')})")
     print(f"\n{saved} file(s) in {out_dir}")
+    if missing:
+        # Seed blank entries so filling them in is just typing the pseudonym.
+        for name in missing:
+            table.setdefault(name, "")
+        save(PSEUDONYMS, table)
+        print(f"\nNo pseudonym for {', '.join(missing)}. Fill in their entries in "
+              f"{PSEUDONYMS}, then rerun with --who for them.")
 
 
 def cmd_remove(args):

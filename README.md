@@ -67,7 +67,25 @@ python exstravator.py fetch --date 2026-09-13
 python exstravator.py fetch --date 2026-09-13 --who sam --who alex
 python exstravator.py fetch --all-types          # today, any sport
 ```
-Files land in `Downloads/ExStravaTor/` as `DATE_name_activityid.gpx`.
+Files land in `Downloads/ExStravaTor/` as `DATE_pseudonym_activityid.gpx`.
+
+## Pseudonyms
+
+Real Strava names never go into the GPX files. Instead, each athlete's
+pseudonym comes from `~/.exstravator/pseudonyms.json`, which you edit by hand:
+```json
+{
+  "Sam Smith": "SAM",
+  "12345678": "ALX"
+}
+```
+Keys are the Strava name exactly as `list` shows it (case doesn't matter) or
+the athlete ID; the ID is sturdier if someone renames their profile. The
+pseudonym goes into both the filename and the GPX `<author>` field.
+
+`fetch` skips anyone without a pseudonym and adds a blank entry for them to
+the file, so you only have to fill in the value and rerun with `--who`.
+`list` shows each athlete's pseudonym next to their name.
 
 If someone has more than one matching activity that day (an early swim, a
 bike commute, a solo shakeout jog before the group run), you'll be shown
